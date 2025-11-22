@@ -5,13 +5,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
 import { Switch } from '@/components/ui/switch'
-import { FolderOpen, Lock, CheckCircle, Loader2, Shield } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import {
+  FolderOpen,
+  Lock,
+  CheckCircle2,
+  Loader2,
+  Shield,
+  Download,
+  FileLock2,
+  Key,
+  FileText,
+  Sparkles
+} from 'lucide-react'
 
 export function PasswordProtector() {
-  const [useFolderPicker, setUseFolderPicker] = useState(false)
   const [useMatricule, setUseMatricule] = useState(true)
   const [customPassword, setCustomPassword] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -19,11 +31,29 @@ export function PasswordProtector() {
   const [success, setSuccess] = useState(false)
   const [filesProtected, setFilesProtected] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [downloadLinks, setDownloadLinks] = useState<{ filename: string, url: string }[]>([])
+  const [downloadLinks, setDownloadLinks] = useState<{ filename: string; url: string }[]>([])
+
+  useEffect(() => {
+    const saved = localStorage.getItem('protectedDownloadLinks')
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        setDownloadLinks(parsed)
+        setSuccess(true)
+        setFilesProtected(parsed.length)
+      } catch (e) { /* ignore */ }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (downloadLinks.length > 0) {
+      localStorage.setItem('protectedDownloadLinks', JSON.stringify(downloadLinks))
+    }
+  }, [downloadLinks])
 
   const handleProtect = async () => {
     if (!selectedFile) return
-    // Reset
+
     setIsProcessing(true)
     setSuccess(false)
     setProgress(0)
@@ -38,38 +68,26 @@ export function PasswordProtector() {
     if (!useMatricule) formData.append('password', customPassword)
 
     try {
-      // Tentative d'appel à une route backend `/api/protect` si elle existe
       const res = await fetch('http://localhost:3600/api/protect', {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
       })
 
       if (res.ok) {
         const data = await res.json()
         if (data.message === 'ok' && data.downloadLinks) {
-          setSuccess(true)
           setDownloadLinks(data.downloadLinks)
-          setFilesProtected(data.downloadLinks.length || 0)
-          try { localStorage.setItem('protectedDownloadLinks', JSON.stringify(data.downloadLinks)) } catch (e) { /* ignore */ }
-        } else {
-          console.error(data.message)
+          setFilesProtected(data.downloadLinks.length)
+          setSuccess(true)
         }
       } else {
-        // Si la route n'existe pas (404) ou autre erreur côté serveur, on effectue un fallback local
-        console.warn('Route /api/protect indisponible (', res.status, '), utilisation du fallback local')
-        // Créer un "fichier protégé" local en réutilisant le blob (pas de chiffrement réel)
-        const blobUrl = URL.createObjectURL(selectedFile)
-        const protectedName = selectedFile.name.replace(/\.pdf$/i, '') + '-protected.pdf'
-        setDownloadLinks([{ filename: protectedName, url: blobUrl }])
-        setFilesProtected(1)
-        setSuccess(true)
+        throw new Error('Backend indisponible')
       }
     } catch (err) {
-      // Erreur réseau : fallback local
-      console.warn('Erreur réseau lors de l\'appel à /api/protect, fallback local :', err)
+      console.warn('Fallback local activé')
       const blobUrl = URL.createObjectURL(selectedFile)
-      const protectedName = selectedFile.name.replace(/\.pdf$/i, '') + '-protected.pdf'
+      const protectedName = selectedFile.name.replace(/\.pdf$/i, '') + '-PROTEGE.pdf'
       setDownloadLinks([{ filename: protectedName, url: blobUrl }])
       setFilesProtected(1)
       setSuccess(true)
@@ -79,197 +97,228 @@ export function PasswordProtector() {
     }
   }
 
-  useEffect(() => {
-    const saved = localStorage.getItem('protectedDownloadLinks')
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        setDownloadLinks(parsed)
-        setSuccess(true)
-        setFilesProtected(parsed.length || 0)
-      } catch (e) { /* ignore */ }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (downloadLinks.length > 0) {
-      localStorage.setItem('protectedDownloadLinks', JSON.stringify(downloadLinks))
-    }
-  }, [downloadLinks])
-
-  const downloadFile = async (fileUrl: string, filename: string) => {
+  const downloadFile = async (url: string, filename: string) => {
     try {
-      const response = await fetch(fileUrl)
-      if (!response.ok) throw new Error('Erreur lors du téléchargement')
-      const blob = await response.blob()
+      const res = await fetch(url)
+      const blob = await res.blob()
 
       if (typeof (window as any).showSaveFilePicker === 'function') {
         try {
-          const opts = {
+          const handle = await (window as any).showSaveFilePicker({
             suggestedName: filename,
-            types: [
-              {
-                description: 'PDF',
-                accept: { 'application/pdf': ['.pdf'] },
-              },
-            ],
-          }
-          const handle = await (window as any).showSaveFilePicker(opts)
+            types: [{ description: 'PDF Protégé', accept: { 'application/pdf': ['.pdf'] } }]
+          })
           const writable = await handle.createWritable()
           await writable.write(blob)
           await writable.close()
-          try { alert(`${filename} sauvegardé.`) } catch (e) { /* ignore */ }
           return
-        } catch (err) {
-          console.warn('Sauvegarde via showSaveFilePicker annulée / échouée :', err)
-        }
+        } catch (e) { /* annulé */ }
       }
 
       const a = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      a.href = url
+      a.href = URL.createObjectURL(blob)
       a.download = filename
-      document.body.appendChild(a)
       a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
+      URL.revokeObjectURL(a.href)
     } catch (err) {
-      console.error('Erreur téléchargement :', err)
+      console.error(err)
     }
   }
 
   const downloadAll = async () => {
-    if (downloadLinks.length === 0) return
-    for (const f of downloadLinks) {
-      await downloadFile(f.url, f.filename)
+    for (const file of downloadLinks) {
+      await downloadFile(file.url, file.filename)
       await new Promise(r => setTimeout(r, 300))
     }
   }
 
+  const clearResults = () => {
+    setDownloadLinks([])
+    setSuccess(false)
+    setFilesProtected(0)
+    localStorage.removeItem('protectedDownloadLinks')
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Protection par mot de passe</CardTitle>
-        <CardDescription>
-          Sécurisez vos fichiers PDF découpés avec un mot de passe
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="folder">Dossier contenant les fichiers PDF</Label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <FolderOpen className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                 type="text"
-                placeholder="C:\Documents\Fiches_Decoupees"
-                value={selectedFile?.name || ''}
-                readOnly
-                className="pl-10"
+    <div className="max-w-5xl mx-auto p-6 space-y-10">
+      {/* En-tête doux */}
+      <div className="text-center space-y-4">
+        <div className="inline-flex items-center justify-center w-18 h-18 rounded-2xl bg-gray-100 border-2 border-gray-200">
+          <Shield className="w-10 h-10 text-gray-600" />
+        </div>
+        <div>
+          <h1 className="text-4xl font-bold text-gray-800">Protection par mot de passe</h1>
+          <p className="text-lg text-gray-600 mt-2">
+            Sécurisez vos bulletins en toute simplicité
+          </p>
+        </div>
+      </div>
+
+      {/* Carte principale */}
+      <Card className="border-gray-200 shadow-lg">
+        <CardHeader className="text-center space-y-3 pb-8">
+          <CardTitle className="text-2xl text-gray-800">Sélectionnez votre fichier PDF</CardTitle>
+          <CardDescription className="text-base text-gray-600">
+            Le fichier sera protégé selon l’option choisie
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-8">
+          {/* Sélection fichier */}
+          <div className="space-y-4">
+            <Label className="text-base font-medium text-gray-700">Fichier à protéger</Label>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <FileText className="absolute left-4 top-4 h-5 w-5 text-gray-500" />
+                <Input
+                  readOnly
+                  placeholder="Aucun fichier sélectionné"
+                  value={selectedFile?.name || ''}
+                  className="pl-12 h-14 bg-gray-50 border-gray-300 text-gray-800"
+                />
+                {selectedFile && (
+                  <Badge variant="secondary" className="absolute right-3 top-3.5 bg-gray-200 text-gray-700">
+                    {(selectedFile.size / 1024 / 1024).toFixed(1)} Mo
+                  </Badge>
+                )}
+              </div>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => document.getElementById('fileInput')?.click()}
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                <FolderOpen className="w-5 h-5 mr-2" />
+                Parcourir
+              </Button>
+            </div>
+            <input id="fileInput" type="file" accept="application/pdf" className="hidden" onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)} />
+          </div>
+
+          <Separator className="bg-gray-200" />
+
+          {/* Option mot de passe */}
+          <div className="space-y-6">
+            <div className="flex items-center justify-between p-5 bg-gray-50 rounded-xl border border-gray-200">
+              <div className="space-y-1">
+                <Label className="text-base font-semibold flex items-center gap-2 text-gray-800">
+                  <Key className="w-5 h-5 text-gray-600" />
+                  Mot de passe = Matricule (recommandé)
+                </Label>
+                <p className="text-sm text-gray-600">
+                  Chaque employé ouvre son bulletin avec son propre matricule
+                </p>
+              </div>
+              <Switch
+                checked={useMatricule}
+                onCheckedChange={setUseMatricule}
+                className="data-[state=checked]:bg-gray-700"
               />
             </div>
-            <Button  variant="outline"
-              onClick={() => document.getElementById('fileInput')?.click()}>
-              <FolderOpen className="w-4 h-4 mr-2" />
-              Parcourir
-            </Button>
-            <input
-              type="file"
-              id="fileInput"
-              accept="application/pdf"
-              className="hidden"
-              onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-            />
-          </div>
-        </div>
 
-        <div className="bg-muted/50 border border-border rounded-lg p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="auto-password" className="text-base">
-                Mot de passe automatique
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Utiliser le matricule comme mot de passe
-              </p>
-            </div>
-            <Switch
-              id="auto-password"
-              checked={useMatricule}
-              onCheckedChange={setUseMatricule}
-            />
-          </div>
-
-          {!useMatricule && (
-            <div className="space-y-2 pt-2">
-              <Label htmlFor="custom">Mot de passe personnalisé</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="custom"
-                  type="password"
-                  placeholder="Entrez un mot de passe"
-                  value={customPassword}
-                  onChange={(e) => setCustomPassword(e.target.value)}
-                  className="pl-10"
-                />
+            {!useMatricule && (
+              <div className="p-5 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
+                <Label className="text-base font-medium text-gray-700">Mot de passe personnalisé</Label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-3.5 h-5 w-5 text-gray-500" />
+                  <Input
+                    type="password"
+                    placeholder="Entrez un mot de passe..."
+                    value={customPassword}
+                    onChange={(e) => setCustomPassword(e.target.value)}
+                    className="pl-12 h-12 border-gray-300"
+                  />
+                </div>
               </div>
+            )}
+          </div>
+
+          {/* Progression */}
+          {isProcessing && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-gray-700 flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
+                  Protection en cours...
+                </span>
+                <span className="text-sm text-gray-600">{filesProtected} fichier(s) traité(s)</span>
+              </div>
+              <Progress value={progress || 50} className="h-3 bg-gray-200" indicatorClassName="bg-gray-600" />
             </div>
           )}
-        </div>
 
-        <div className="bg-accent/10 border border-accent/30 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <Shield className="w-5 h-5 text-accent mt-0.5" />
-            <div className="space-y-1">
-              <p className="font-medium text-sm text-foreground">Sécurité renforcée</p>
-              <p className="text-sm text-muted-foreground">
-                {useMatricule 
-                  ? "Le matricule de chaque employé sera utilisé comme mot de passe unique pour son fichier PDF."
-                  : "Tous les fichiers seront protégés avec le même mot de passe personnalisé."}
-              </p>
+          {/* Bouton principal */}
+          <Button
+            onClick={handleProtect}
+            disabled={!selectedFile || isProcessing || (!useMatricule && customPassword.length < 4)}
+            size="lg"
+            className="w-full h-14 text-lg font-medium bg-gray-800 hover:bg-gray-900 text-white"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="w-6 h-6 mr-3 animate-spin" />
+                Protection en cours...
+              </>
+            ) : (
+              <>
+                <FileLock2 className="w-6 h-6 mr-3" />
+                Protéger le fichier
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Résultats */}
+      {success && downloadLinks.length > 0 && (
+        <Card className="border-2 border-gray-300 bg-gray-50/50">
+          <CardHeader>
+            <Alert className="border-none bg-transparent">
+              <CheckCircle2 className="h-9 w-9 text-gray-700" />
+              <AlertTitle className="text-2xl text-gray-800 ml-3">Protection terminée</AlertTitle>
+              <AlertDescription className="text-lg text-gray-700 ml-3">
+                {filesProtected} fichier(s) sécurisé(s) avec succès
+              </AlertDescription>
+            </Alert>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            <div className="flex flex-wrap gap-3 justify-center">
+              <Button onClick={downloadAll} size="lg" className="bg-gray-800 hover:bg-gray-900">
+                <Download className="w-5 h-5 mr-2" />
+                Télécharger tout
+              </Button>
+              <Button onClick={clearResults} size="lg" variant="outline" className="border-gray-400">
+                <Sparkles className="w-5 h-5 mr-2" />
+                Nouvelle protection
+              </Button>
             </div>
-          </div>
-        </div>
 
-        {isProcessing && (
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Protection en cours...</span>
-              <span className="font-medium text-foreground">{filesProtected} fichiers protégés</span>
+            <Separator className="bg-gray-300" />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {downloadLinks.map((file) => (
+                <div key={file.filename} className="p-5 border border-gray-300 rounded-xl bg-white hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-3">
+                    <FileLock2 className="w-9 h-9 text-gray-600" />
+                    <Badge className="bg-gray-200 text-gray-700">Protégé</Badge>
+                  </div>
+                  <h4 className="font-semibold text-gray-800 truncate">{file.filename}</h4>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {useMatricule ? 'Mot de passe = matricule' : 'Mot de passe fixe'}
+                  </p>
+                  <Button onClick={() => downloadFile(file.url, file.filename)} className="w-full mt-4 text-sm" variant="secondary">
+                    <Download className="w-4 h-4 mr-2" />
+                    Télécharger
+                  </Button>
+                </div>
+              ))}
             </div>
-            <Progress value={progress} className="h-2" />
-          </div>
-        )}
-
-        {success && (
-          <Alert className="border-accent/50 bg-accent/10">
-            <CheckCircle className="h-4 w-4 text-accent" />
-            <AlertDescription className="text-accent-foreground">
-              Protection terminée ! {filesProtected} fichiers ont été sécurisés avec succès.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <Button
-          onClick={handleProtect}
-          disabled={!selectedFile || isProcessing || (!useMatricule && !customPassword)}
-          className="w-full"
-          size="lg"
-        >
-          {isProcessing ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Protection en cours...
-            </>
-          ) : (
-            <>
-              <Lock className="w-4 h-4 mr-2" />
-              Protéger les fichiers
-            </>
-          )}
-        </Button>
-      </CardContent>
-    </Card>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   )
 }
+
+export default PasswordProtector

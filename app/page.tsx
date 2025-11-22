@@ -18,17 +18,16 @@ export default function HomePage() {
             </div>
             <div>
               <h1 className="font-bold text-2xl bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                PaySlipPro
-              </h1>
+                PaieDigit              </h1>
               <p className="text-xs text-muted-foreground">Gestion des fiches de paie</p>
             </div>
           </div>
-          <Button 
-            onClick={() => setIsLoginOpen(true)} 
+          <Button
+            onClick={() => setIsLoginOpen(true)}
             size="lg"
             className="gradient-accent text-white hover:opacity-90 transition-all hover:scale-105 shadow-lg"
           >
-            <Sparkles className="w-4 h-4 mr-2" />
+
             Se connecter
           </Button>
         </div>
@@ -63,7 +62,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="group bg-white border-2 border-accent/20 rounded-2xl p-8 space-y-4 hover:shadow-2xl hover:border-accent/50 transition-all duration-300 hover:-translate-y-2 animate-scale-in" style={{animationDelay: '0.1s'}}>
+            <div className="group bg-white border-2 border-accent/20 rounded-2xl p-8 space-y-4 hover:shadow-2xl hover:border-accent/50 transition-all duration-300 hover:-translate-y-2 animate-scale-in" style={{ animationDelay: '0.1s' }}>
               <div className="w-16 h-16 rounded-2xl gradient-accent flex items-center justify-center mx-auto group-hover:scale-110 transition-transform shadow-lg">
                 <Lock className="w-8 h-8 text-white" />
               </div>
@@ -76,7 +75,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="group bg-white border-2 border-secondary/20 rounded-2xl p-8 space-y-4 hover:shadow-2xl hover:border-secondary/50 transition-all duration-300 hover:-translate-y-2 animate-scale-in" style={{animationDelay: '0.2s'}}>
+            <div className="group bg-white border-2 border-secondary/20 rounded-2xl p-8 space-y-4 hover:shadow-2xl hover:border-secondary/50 transition-all duration-300 hover:-translate-y-2 animate-scale-in" style={{ animationDelay: '0.2s' }}>
               <div className="w-16 h-16 rounded-2xl gradient-secondary flex items-center justify-center mx-auto group-hover:scale-110 transition-transform shadow-lg">
                 <Mail className="w-8 h-8 text-white" />
               </div>
@@ -90,10 +89,10 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="relative bg-white border-2 border-primary/20 rounded-3xl p-10 mt-16 space-y-6 overflow-hidden animate-scale-in" style={{animationDelay: '0.3s'}}>
+          <div className="relative bg-white border-2 border-primary/20 rounded-3xl p-10 mt-16 space-y-6 overflow-hidden animate-scale-in" style={{ animationDelay: '0.3s' }}>
             <div className="absolute top-0 right-0 w-64 h-64 gradient-accent opacity-10 rounded-full blur-3xl animate-pulse-slow" />
-            <div className="absolute bottom-0 left-0 w-64 h-64 gradient-secondary opacity-10 rounded-full blur-3xl animate-pulse-slow" style={{animationDelay: '1.5s'}} />
-            
+            <div className="absolute bottom-0 left-0 w-64 h-64 gradient-secondary opacity-10 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '1.5s' }} />
+
             <div className="relative z-10">
               <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center mx-auto mb-4 animate-float shadow-lg">
                 <CheckCircle className="w-9 h-9 text-white" />
@@ -104,12 +103,12 @@ export default function HomePage() {
               <p className="text-muted-foreground leading-relaxed max-w-xl mx-auto">
                 Connectez-vous pour accéder à l{"'"}application et simplifier la gestion de vos fiches de paie
               </p>
-              <Button 
-                size="lg" 
-                onClick={() => setIsLoginOpen(true)} 
+              <Button
+                size="lg"
+                onClick={() => setIsLoginOpen(true)}
                 className="mt-6 gradient-accent text-white hover:opacity-90 transition-all hover:scale-110 shadow-xl text-lg px-8 py-6"
               >
-                <Sparkles className="w-5 h-5 mr-2" />
+
                 Accéder à l{"'"}application
               </Button>
             </div>

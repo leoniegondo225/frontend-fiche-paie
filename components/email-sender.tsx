@@ -1,246 +1,338 @@
 'use client'
 
-import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
-import { Switch } from '@/components/ui/switch'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { FolderOpen, Mail, CheckCircle, Loader2, Clock, Users } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import {
+  CheckCircle2,
+  Loader2,
+  Mail,
+  Clock,
+  Upload,
+  Send,
+  CalendarClock,
+  Files,
+  AlertCircle
+} from 'lucide-react'
 
-// Données fictives d'employés
-const MOCK_EMPLOYEES = [
-  { matricule: 'EMP001', nom: 'Dupont', prenom: 'Jean', email: 'jean.dupont@example.com' },
-  { matricule: 'EMP002', nom: 'Martin', prenom: 'Sophie', email: 'sophie.martin@example.com' },
-  { matricule: 'EMP003', nom: 'Bernard', prenom: 'Pierre', email: 'pierre.bernard@example.com' },
-  { matricule: 'EMP004', nom: 'Dubois', prenom: 'Marie', email: 'marie.dubois@example.com' },
-  { matricule: 'EMP005', nom: 'Laurent', prenom: 'Luc', email: 'luc.laurent@example.com' },
-]
+interface FileLink {
+  matricule: string
+  url: string
+  email?: string
+}
 
-export function EmailSender() {
-  const [folderPath, setFolderPath] = useState('')
-  const [emailSubject, setEmailSubject] = useState('Votre fiche de paie')
-  const [emailBody, setEmailBody] = useState('Bonjour,\n\nVeuillez trouver ci-joint votre fiche de paie.\n\nCordialement,\nService RH')
-  const [scheduleSend, setScheduleSend] = useState(false)
-  const [scheduleDate, setScheduleDate] = useState('')
-  const [scheduleTime, setScheduleTime] = useState('')
-  const [sendMode, setSendMode] = useState<'all' | 'individual'>('all')
+export function PdfEmailManager() {
+  const [localFiles, setLocalFiles] = useState<File[]>([])
+  const [splitFiles, setSplitFiles] = useState<FileLink[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [success, setSuccess] = useState(false)
   const [emailsSent, setEmailsSent] = useState(0)
+  const [success, setSuccess] = useState(false)
+  const [scheduledTime, setScheduledTime] = useState<string>("")
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const [isScheduled, setIsScheduled] = useState(false)
 
-  const handleSend = async () => {
-    if (!folderPath) {
-      return
-    }
+  useEffect(() => {
+    const saved = localStorage.getItem("downloadLinks")
+    if (saved) setSplitFiles(JSON.parse(saved))
+  }, [])
+
+  // Compte à rebours
+  useEffect(() => {
+    if (!isScheduled || !scheduledTime) return
+
+    const interval = setInterval(() => {
+      const diff = new Date(scheduledTime).getTime() - new Date().getTime()
+      if (diff <= 0) {
+        clearInterval(interval)
+        sendFilesByEmail([...localFiles, ...splitFiles])
+        setIsScheduled(false)
+        setCountdown(null)
+      } else {
+        setCountdown(Math.floor(diff / 1000))
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [isScheduled, scheduledTime, localFiles, splitFiles])
+
+  const handleLocalFilesChange = (files: FileList | null) => {
+    if (!files) return
+    setLocalFiles(Array.from(files))
+  }
+
+  const sendFilesByEmail = async (files: (File | FileLink)[]) => {
+    if (files.length === 0) return
 
     setIsProcessing(true)
-    setSuccess(false)
     setProgress(0)
     setEmailsSent(0)
+    setSuccess(false)
 
-    // Simulation de l'envoi
-    const totalEmails = MOCK_EMPLOYEES.length
-    for (let i = 1; i <= totalEmails; i++) {
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setProgress((i / totalEmails) * 100)
-      setEmailsSent(i)
+    const total = files.length
+
+    for (let i = 0; i < total; i++) {
+      const item = files[i]
+      try {
+        let body: FormData
+        const endpoint = "http://localhost:3600/api/sendOne"
+
+        if (item instanceof File) {
+          // Fichier local
+          body = new FormData()
+          body.append("files", item)
+          body.append(
+            "files",
+            JSON.stringify([{ matricule: item.name.replace(".pdf", ""), email: "leoniegondo@gmail.com" }])
+          )
+        } else {
+          // Fichier découpé (via URL)
+          const response = await fetch(item.url)
+          const blob = await response.blob()
+          const pdfFile = new File([blob], `${item.matricule}.pdf`, { type: "application/pdf" })
+          body = new FormData()
+          body.append("files", pdfFile)
+          body.append(
+            "files",
+            JSON.stringify([{ matricule: item.matricule, email: item.email || "leoniegondo@gmail.com" }])
+          )
+        }
+
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          body
+        })
+
+        if (!res.ok) {
+          const errorText = await res.text()
+          console.error("Backend error:", res.status, errorText)
+        }
+      } catch (err) {
+        console.error("Frontend error:", err)
+      }
+
+      setEmailsSent(i + 1)
+      setProgress(((i + 1) / total) * 100)
+      await new Promise(r => setTimeout(r, 200))
     }
 
     setIsProcessing(false)
     setSuccess(true)
   }
 
+  const formatCountdown = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}m ${s.toString().padStart(2, '0')}s`
+  }
+
+  const totalFilesToSend = localFiles.length + splitFiles.length
+
   return (
-    <div className="space-y-6">
-      <Card>
+    <div className="max-w-4xl mx-auto p-6 space-y-8">
+      <div className="text-center space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight">Gestionnaire d'envoi PDF par email</h1>
+        <p className="text-muted-foreground">Envoyez vos PDFs découpés ou locaux en un clic</p>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* === Fichiers locaux === */}
+        <Card className="border-2 hover:border-primary/30 transition-colors">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5" />
+              Fichiers locaux
+            </CardTitle>
+            <CardDescription>
+              Sélectionnez un ou plusieurs PDFs depuis votre ordinateur
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input
+              type="file"
+              multiple
+              accept="application/pdf"
+              onChange={(e) => handleLocalFilesChange(e.target.files)}
+              className="cursor-pointer"
+            />
+            
+            {localFiles.length > 0 && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">{localFiles.length} fichier(s) sélectionné(s)</span>
+                    <Badge variant="secondary">{localFiles.length} PDFs</Badge>
+                  </div>
+                  <Button
+                    onClick={() => sendFilesByEmail(localFiles)}
+                    disabled={isProcessing || isScheduled}
+                    className="w-full"
+                    size="sm"
+                  >
+                    {isProcessing ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4 mr-2" />
+                    )}
+                    Envoyer maintenant
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* === Fichiers découpés === */}
+        <Card className="border-2 hover:border-primary/30 transition-colors">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Files className="w-5 h-5" />
+              Fichiers découpés
+            </CardTitle>
+            <CardDescription>
+              {splitFiles.length} fichier(s) disponible(s) depuis le dernier découpage
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {splitFiles.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                Aucun fichier découpé disponible
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {splitFiles.map(f => (
+                  <div
+                    key={f.matricule}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="bg-primary/10 p-2 rounded">
+                        <Mail className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{f.matricule}.pdf</p>
+                        {f.email && <p className="text-xs text-muted-foreground">{f.email}</p>}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => sendFilesByEmail([f])}
+                      disabled={isProcessing || isScheduled}
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                {splitFiles.length > 0 && (
+                  <Button
+                    onClick={() => sendFilesByEmail(splitFiles)}
+                    disabled={isProcessing || isScheduled}
+                    className="w-full mt-4"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Tout envoyer ({splitFiles.length})
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* === Programmation d'envoi === */}
+      <Card className="border-2 border-dashed">
         <CardHeader>
-          <CardTitle>Envoi par email</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarClock className="w-6 h-6" />
+            Programmation d'envoi
+          </CardTitle>
           <CardDescription>
-            Envoyez les fiches de paie par email de manière individuelle ou groupée
+            Envoyez automatiquement tous les fichiers (locaux + découpés) à une date précise
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="email-folder">Dossier contenant les fichiers PDF</Label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <FolderOpen className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email-folder"
-                  placeholder="C:\Documents\Fiches_Decoupees"
-                  value={folderPath}
-                  onChange={(e) => setFolderPath(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <Button variant="outline">
-                <FolderOpen className="w-4 h-4 mr-2" />
-                Parcourir
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="send-mode">Mode d{"'"}envoi</Label>
-            <Select value={sendMode} onValueChange={(value: 'all' | 'individual') => setSendMode(value)}>
-              <SelectTrigger id="send-mode">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Envoi groupé (tous les employés)</SelectItem>
-                <SelectItem value="individual">Envoi individuel (sélection)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="subject">Objet de l{"'"}email</Label>
+          <div className="flex flex-col sm:flex-row gap-4">
             <Input
-              id="subject"
-              value={emailSubject}
-              onChange={(e) => setEmailSubject(e.target.value)}
-              placeholder="Objet de l'email"
+              type="datetime-local"
+              value={scheduledTime}
+              onChange={(e) => setScheduledTime(e.target.value)}
+              disabled={isProcessing}
+              className="flex-1"
             />
+            <Button
+              onClick={() => {
+                if (!scheduledTime) return alert("Veuillez choisir une date et heure")
+                setIsScheduled(true)
+              }}
+              disabled={isProcessing || isScheduled || totalFilesToSend === 0}
+              size="lg"
+              className="sm:w-auto w-full"
+            >
+              <Clock className="w-4 h-4 mr-2" />
+              Programmer
+            </Button>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="body">Corps du message</Label>
-            <Textarea
-              id="body"
-              value={emailBody}
-              onChange={(e) => setEmailBody(e.target.value)}
-              placeholder="Contenu de l'email"
-              rows={6}
-            />
-          </div>
-
-          <div className="bg-muted/50 border border-border rounded-lg p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="schedule" className="text-base">
-                  Programmer l{"'"}envoi
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Planifier l{"'"}envoi pour une date et heure ultérieure
-                </p>
-              </div>
-              <Switch
-                id="schedule"
-                checked={scheduleSend}
-                onCheckedChange={setScheduleSend}
-              />
-            </div>
-
-            {scheduleSend && (
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <div className="space-y-2">
-                  <Label htmlFor="date">Date</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={scheduleDate}
-                    onChange={(e) => setScheduleDate(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="time">Heure</Label>
-                  <Input
-                    id="time"
-                    type="time"
-                    value={scheduleTime}
-                    onChange={(e) => setScheduleTime(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {isProcessing && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Envoi en cours...</span>
-                <span className="font-medium text-foreground">{emailsSent} / {MOCK_EMPLOYEES.length} emails envoyés</span>
-              </div>
-              <Progress value={progress} className="h-2" />
-            </div>
-          )}
-
-          {success && (
-            <Alert className="border-accent/50 bg-accent/10">
-              <CheckCircle className="h-4 w-4 text-accent" />
-              <AlertDescription className="text-accent-foreground">
-                {scheduleSend 
-                  ? `Envoi programmé pour le ${scheduleDate} à ${scheduleTime}. ${emailsSent} emails seront envoyés.`
-                  : `Envoi terminé ! ${emailsSent} emails ont été envoyés avec succès.`}
+          {isScheduled && countdown !== null && (
+            <Alert className="border-blue-200 bg-blue-50">
+              <Clock className="h-4 w-4" />
+              <AlertDescription className="font-medium">
+                Envoi programmé dans : <span className="text-blue-700">{formatCountdown(countdown)}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-4"
+                  onClick={() => {
+                    setIsScheduled(false)
+                    setCountdown(null)
+                    setScheduledTime("")
+                  }}
+                >
+                  Annuler
+                </Button>
               </AlertDescription>
             </Alert>
           )}
+        </CardContent>
+      </Card>
 
-          <Button
-            onClick={handleSend}
-            disabled={!folderPath || isProcessing || (scheduleSend && (!scheduleDate || !scheduleTime))}
-            className="w-full"
-            size="lg"
-          >
-            {isProcessing ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+      {/* === Barre de progression === */}
+      {isProcessing && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
                 Envoi en cours...
-              </>
-            ) : scheduleSend ? (
-              <>
-                <Clock className="w-4 h-4 mr-2" />
-                Programmer l{"'"}envoi
-              </>
-            ) : (
-              <>
-                <Mail className="w-4 h-4 mr-2" />
-                Envoyer maintenant
-              </>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+              </span>
+              <span className="text-sm text-muted-foreground">
+                {emailsSent} / {totalFilesToSend}
+              </span>
+            </div>
+            <Progress value={progress} className="h-3" />
+          </CardContent>
+        </Card>
+      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="w-5 h-5" />
-            Aperçu des destinataires
-            <Badge variant="secondary">{MOCK_EMPLOYEES.length}</Badge>
-          </CardTitle>
-          <CardDescription>
-            Liste des employés qui recevront leur fiche de paie
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {MOCK_EMPLOYEES.map((employee) => (
-              <div key={employee.matricule} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
-                    <span className="text-sm font-medium text-accent">{employee.prenom.charAt(0)}{employee.nom.charAt(0)}</span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm text-foreground">{employee.prenom} {employee.nom}</p>
-                    <p className="text-xs text-muted-foreground">{employee.email}</p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="font-mono text-xs">
-                  {employee.matricule}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* === Message de succès === */}
+      {success && (
+        <Alert className="border-green-200 bg-green-50">
+          <CheckCircle2 className="h-5 w-5 text-green-600" />
+          <AlertTitle className="text-green-800">Succès !</AlertTitle>
+          <AlertDescription className="text-green-700">
+            {emailsSent} fichier(s) ont été envoyés avec succès
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
   )
 }
+
+export default PdfEmailManager

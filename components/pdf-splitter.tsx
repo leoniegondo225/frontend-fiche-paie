@@ -5,24 +5,40 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Alert } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
-import { FileText, CheckCircle, Loader2, FolderOpen } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import {
+  FileText,
+  CheckCircle2,
+  Loader2,
+  FolderOpen,
+  Download,
+  Mail,
+  RefreshCw,
+  Upload,
+  FileCheck,
+  Trash2,
+  Send
+} from 'lucide-react'
 
 export function PdfSplitter() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [success, setSuccess] = useState(false)
-  const [downloadLinks, setDownloadLinks] = useState<{ matricule: string, url: string }[]>([])
+  const [downloadLinks, setDownloadLinks] = useState<{ matricule: string; url: string; email?: string }[]>([])
+  const [showModal, setShowModal] = useState(false)
+  const [modalMessage, setModalMessage] = useState('')
 
-  /* ---------------------------------------------------- */
-  /* Charger depuis localStorage                          */
-  /* ---------------------------------------------------- */
+
+  // Chargement depuis localStorage
   useEffect(() => {
     const saved = localStorage.getItem("downloadLinks")
     if (saved) {
-      setDownloadLinks(JSON.parse(saved))
+      const links = JSON.parse(saved)
+      setDownloadLinks(links)
       setSuccess(true)
     }
   }, [])
@@ -32,147 +48,86 @@ export function PdfSplitter() {
       localStorage.setItem("downloadLinks", JSON.stringify(downloadLinks))
     }
   }, [downloadLinks])
-
-  /* ---------------------------------------------------- */
-  /* Téléchargement direct d’un fichier                   */
-  /* ---------------------------------------------------- */
+   const showModalMessage = (message: string) => {
+    setModalMessage(message)
+    setShowModal(true)
+   }
+const handleCloseModal = () => setShowModal(false)
+  // Téléchargement intelligent (File System Access API + fallback)
   const downloadFile = async (fileUrl: string, filename: string) => {
-    console.log("Téléchargement de :", fileUrl)
-
     try {
-      // Récupération du fichier
       const response = await fetch(fileUrl)
-      if (!response.ok) throw new Error('Erreur lors du téléchargement')
-
+      if (!response.ok) throw new Error('Erreur téléchargement')
       const blob = await response.blob()
 
-      // Si l'API File System Access est disponible, proposer un emplacement de sauvegarde
       if (typeof (window as any).showSaveFilePicker === 'function') {
         try {
-          const opts = {
+          const handle = await (window as any).showSaveFilePicker({
             suggestedName: filename,
-            types: [
-              {
-                description: 'PDF',
-                accept: { 'application/pdf': ['.pdf'] },
-              },
-            ],
-          }
-
-          const handle = await (window as any).showSaveFilePicker(opts)
+            types: [{ description: 'PDF Files', accept: { 'application/pdf': ['.pdf'] } }]
+          })
           const writable = await handle.createWritable()
           await writable.write(blob)
           await writable.close()
-
-          // Optionnel : feedback utilisateur
-          try { alert(`${filename} sauvegardé.`) } catch (e) { /* ignore */ }
           return
-        } catch (err) {
-          // Si l'utilisateur annule ou si erreur, on retombe sur le fallback
-          console.warn('Sauvegarde via showSaveFilePicker annulée / échouée :', err)
-        }
+        } catch (err) { /* utilisateur a annulé */ }
       }
 
-      // Fallback : déclencher un téléchargement via un <a>
+      // Fallback classique
       const a = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-
-      a.href = url
+      a.href = URL.createObjectURL(blob)
       a.download = filename
-      document.body.appendChild(a)
       a.click()
-
-      // Nettoyage
-      a.remove()
-      URL.revokeObjectURL(url)
+      URL.revokeObjectURL(a.href)
     } catch (err) {
-      console.error('Erreur téléchargement :', err)
+      console.error(err)
     }
   }
 
-  /* ---------------------------------------------------- */
-  /* Utilitaires d'écriture (File System Access API)     */
-  /* ---------------------------------------------------- */
-  const downloadFileToDirectory = async (
-    fileUrl: string,
-    filename: string,
-    dirHandle: any
-  ) => {
-    const res = await fetch(fileUrl);
-    if (!res.ok) throw new Error(`Échec du téléchargement: ${res.status}`);
-    const blob = await res.blob();
-
-    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(blob);
-    await writable.close();
+  const downloadFileToDirectory = async (fileUrl: string, filename: string, dirHandle: any) => {
+    const res = await fetch(fileUrl)
+    const blob = await res.blob()
+    const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
+    const writable = await fileHandle.createWritable()
+    await writable.write(blob)
+    await writable.close()
   }
 
-  /* ---------------------------------------------------- */
-  /* Téléchargement de tous les fichiers                  */
-  /* - Essaie d'abord d'ouvrir un choix de dossier        */
-  /* - Si indisponible, fallback vers <a download>       */
-  /* ---------------------------------------------------- */
   const downloadAll = async () => {
     if (downloadLinks.length === 0) return
 
-    // Si l'API File System est disponible, demander un dossier
-    // Note: API disponible typiquement sur les navigateurs Chromium (Chrome, Edge)
     if (typeof (window as any).showDirectoryPicker === 'function') {
       try {
         const dirHandle = await (window as any).showDirectoryPicker()
-
         for (const file of downloadLinks) {
-          try {
-            await downloadFileToDirectory(file.url, `${file.matricule}.pdf`, dirHandle)
-          } catch (err) {
-            console.error('Erreur écriture fichier dans le dossier:', err)
-          }
+          await downloadFileToDirectory(file.url, `${file.matricule}.pdf`, dirHandle)
         }
-
-        // Simple feedback à l'utilisateur
-        try { alert('Tous les fichiers ont été sauvegardés dans le dossier sélectionné.') } catch (e) { /* ignore */ }
+        alert("Tous les fichiers ont été sauvegardés dans le dossier choisi !")
         return
       } catch (err) {
-        // L'utilisateur a peut-être annulé le picker ou une erreur est survenue
-        console.warn('Sélection de dossier annulée ou erreur:', err)
-        // fallback au comportement standard
+        console.warn("Dossier annulé ou erreur")
       }
     }
 
-    // Fallback: déclencher les téléchargements via des liens <a>
-    try {
-      if (downloadLinks.length > 1) {
-        try {
-          alert("Votre navigateur ne permet pas de choisir un dossier. Il vous demandera où enregistrer chaque fichier.")
-        } catch (e) { /* ignore */ }
-      }
-
-      for (const file of downloadLinks) {
-        await downloadFile(file.url, `${file.matricule}.pdf`)
-        await new Promise(r => setTimeout(r, 300)) // évite le blocage navigateur
-      }
-    } catch (err) {
-      console.error('Erreur lors du téléchargement en fallback :', err)
+    // Fallback individuel
+    for (const file of downloadLinks) {
+      await downloadFile(file.url, `${file.matricule}.pdf`)
+      await new Promise(r => setTimeout(r, 300))
     }
   }
 
-  /* ---------------------------------------------------- */
-  /* Suppression totale                                   */
-  /* ---------------------------------------------------- */
+    
+
   const clearAll = () => {
     setDownloadLinks([])
     setSuccess(false)
+    setSelectedFile(null)
     localStorage.removeItem("downloadLinks")
   }
 
-  /* ---------------------------------------------------- */
-  /* Appel backend : découpage PDF                        */
-  /* ---------------------------------------------------- */
   const handleSplit = async () => {
     if (!selectedFile) return
 
-    // Reset
     localStorage.removeItem("downloadLinks")
     setIsProcessing(true)
     setProgress(0)
@@ -181,7 +136,7 @@ export function PdfSplitter() {
 
     const token = localStorage.getItem('token')
     if (!token) {
-      console.error("Aucun token trouvé")
+      alert("Token manquant")
       setIsProcessing(false)
       return
     }
@@ -192,19 +147,15 @@ export function PdfSplitter() {
     try {
       const res = await fetch('http://localhost:3600/api/upload', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       })
 
       const data = await res.json()
 
       if (data.message === 'ok' && data.downloadLinks) {
-        setSuccess(true)
         setDownloadLinks(data.downloadLinks)
-      } else {
-        console.error(data.message)
+        setSuccess(true)
       }
     } catch (err) {
       console.error(err)
@@ -214,178 +165,268 @@ export function PdfSplitter() {
     }
   }
 
-const sendByEmail = async (file: { matricule: string; url: string }) => {
+  const sendByEmail = async (file: { matricule: string; url: string; email?: string }) => {
   try {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      alert("Aucun token trouvé.");
-      return;
-    }
+    const token = localStorage.getItem("token")
+    if (!token) throw new Error("Token manquant")
 
-    const res = await fetch("http://localhost:3600/api/payslips/send", {
+    const response = await fetch(file.url)
+    const blob = await response.blob()
+    const pdfFile = new File([blob], `${file.matricule}.pdf`, { type: "application/pdf" })
+
+    const formData = new FormData()
+    formData.append("files", pdfFile)
+    formData.append(
+      "files",
+      JSON.stringify([{ matricule: file.matricule, email: file.email || "leoniegondo@gmail.com" }])
+    )
+
+    const res = await fetch("http://localhost:3600/api/sendOne", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        matricule: file.matricule,
-        pdfUrl: file.url, // 🔥 ON ENVOIE L’URL DU PDF, PAS UN FICHIER
-      }),
-    });
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData
+    })
 
-    const data = await res.json();
+    const data = await res.json()
+   if (res.ok) showModalMessage(`Email envoyé à ${data.email || "l'adresse associée"}`)
+      else showModalMessage("Erreur : " + data.message)
+  } catch (err) {
+    console.error(err)
+    showModalMessage("Erreur réseau lors de l'envoi")
+  }
+}
 
-    if (!res.ok) {
-      alert("Erreur : " + data.message);
-      return;
+const sendAllByEmail = async () => {
+  if (downloadLinks.length === 0) return
+
+  try {
+    const token = localStorage.getItem("token")
+    const formData = new FormData()
+
+    for (const file of downloadLinks) {
+      const response = await fetch(file.url)
+      const blob = await response.blob()
+      const pdfFile = new File([blob], `${file.matricule}.pdf`, { type: "application/pdf" })
+      formData.append("files", pdfFile)
     }
 
-    alert(`Email envoyé à : ${data.email}`);
-  } catch (error) {
-    console.error(error);
-    alert("Erreur lors de l'envoi du mail.");
+    formData.append(
+      "files",
+      JSON.stringify(
+        downloadLinks.map(d => ({ matricule: d.matricule, email: d.email || "leoniegondo@gmail.com" }))
+      )
+    )
+
+    const res = await fetch("http://localhost:3600/api/sendOne", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData
+    })
+
+    const data = await res.json()
+    if (res.ok) showModalMessage("Tous les bulletins ont été envoyés !")
+      else showModalMessage("Erreur : " + data.message)
+  } catch (err) {
+    console.error(err)
+    showModalMessage("Erreur lors de l'envoi groupé")
   }
-};
+}
 
 
-
-  /* ---------------------------------------------------- */
-  /* Interface                                             */
-  /* ---------------------------------------------------- */
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Découpage de fichier PDF</CardTitle>
-        <CardDescription>Sélectionnez le fichier PDF à découper</CardDescription>
-      </CardHeader>
+    <div className="max-w-5xl mx-auto p-6 space-y-8">
+      <div className="text-center space-y-3">
+        <h1 className="text-4xl font-bold tracking-tight">Découpeur de Bulletins de Paie</h1>
+        <p className="text-lg text-muted-foreground">
+          Séparez un PDF contenant plusieurs bulletins en fichiers individuels par matricule
+        </p>
+      </div>
 
-      <CardContent className="space-y-6">
-        {/* ----------------------------- Sélection PDF ---------------------------- */}
-        <div className="space-y-2">
-          <Label>Fichier PDF source</Label>
-          <div className="flex gap-2">
-          <div className='relative flex-1'>
-  <FolderOpen className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="C:\Documents\Fiches_pdf"
-            value={selectedFile?.name || ''}
-            readOnly
-            className='pl-10'
-          />
+      <Card className="border-2 shadow-xl">
+        <CardHeader className="text-center pb-8">
+          <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+            <FileText className="w-10 h-10 text-primary" />
           </div>
+          <CardTitle className="text-2xl">Téléversez votre fichier PDF groupé</CardTitle>
+          <CardDescription className="text-base">
+            Le fichier sera découpé automatiquement par matricule
+          </CardDescription>
+        </CardHeader>
 
-          <Button
-            variant="outline"
-            onClick={() => document.getElementById('fileInput')?.click()}
-          >
-            <FolderOpen className="w-4 h-4 mr-2" />
-            Parcourir
-          </Button>
-          </div>
-
-          <input
-            type="file"
-            id="fileInput"
-            accept="application/pdf"
-            className="hidden"
-            onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-          />
-        </div>
-
-        {/* ----------------------------- Progress Bar ----------------------------- */}
-        {isProcessing && (
-          <div className="space-y-2">
-            <span className="text-muted-foreground">Découpage en cours...</span>
-            <Progress value={progress} className="h-2" />
-          </div>
-        )}
-
-        {/* ----------------------------- Résultats ----------------------------- */}
-        {success && downloadLinks.length > 0 && (
-          <div className='w-full flex flex-col border-accent/50 bg-accent/10 p-4'>
- <div className="flex items-center justify-between w-full">
-              <p className="font-medium text-primary flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-accent" />
-                Découpage terminé !
-              </p>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={downloadAll}
-                  className="bg-green-600 text-white hover:bg-green-700"
-                >
-                  Télécharger tout
-                </Button>
-
-                <Button
-                  onClick={clearAll}
-                  className="bg-red-600 text-white hover:bg-red-700"
-                >
-                  Nouveau
-                </Button>
+        <CardContent className="space-y-8">
+          {/* Sélection du fichier */}
+          <div className="space-y-4">
+            <Label className="text-lg">Fichier PDF à découper</Label>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <FileText className="absolute left-4 top-4 h-5 w-5 text-muted-foreground" />
+                <Input
+                  readOnly
+                  placeholder="Aucun fichier sélectionné"
+                  value={selectedFile?.name || ''}
+                  className="pl-12 h-14 text-lg cursor-default bg-muted/50"
+                />
+                {selectedFile && (
+                  <Badge variant="secondary" className="absolute right-3 top-3.5">
+                    <FileCheck className="w-3.5 h-3.5 mr-1" />
+                    {selectedFile.size > 1024 * 1024
+                      ? `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB`
+                      : `${Math.round(selectedFile.size / 1024)} KB`}
+                  </Badge>
+                )}
               </div>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => document.getElementById('fileInput')?.click()}
+                className="sm:w-auto w-full"
+              >
+                <FolderOpen className="w-5 h-5 mr-2" />
+                Choisir un fichier
+              </Button>
+            </div>
+            <input
+              id="fileInput"
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+            />
+          </div>
+
+          <Separator />
+
+          {/* Barre de progression */}
+          {isProcessing && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Découpage en cours...
+                </span>
+                <span className="text-sm text-muted-foreground">Préparation des bulletins</span>
+              </div>
+              <Progress value={progress || 70} className="h-4" />
+            </div>
+          )}
+
+          {/* Bouton principal */}
+          <Button
+            onClick={handleSplit}
+            disabled={!selectedFile || isProcessing}
+            size="lg"
+            className="w-full h-14 text-lg font-semibold"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="w-6 h-6 mr-3 animate-spin" />
+                Découpage en cours...
+              </>
+            ) : (
+              <>
+                <Upload className="w-6 h-6 mr-3" />
+                Lancer le découpage
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Résultats */}
+      {success && downloadLinks.length > 0 && (
+        <Card className="border-2 border-green-200 bg-green-50/50">
+          <CardHeader>
+            <Alert className="border-none bg-transparent">
+              <CheckCircle2 className="h-8 w-8 text-green-600" />
+              <AlertTitle className="text-2xl text-green-800">
+                Découpage terminé avec succès !
+              </AlertTitle>
+              <AlertDescription className="text-lg text-green-700">
+                {downloadLinks.length} bulletin(s) individuel(s) généré(s)
+              </AlertDescription>
+            </Alert>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            {/* Actions globales */}
+            <div className="flex flex-wrap gap-3 justify-center">
+              <Button onClick={downloadAll} size="lg" className="bg-green-600 hover:bg-green-700">
+                <Download className="w-5 h-5 mr-2" />
+                Télécharger tous les PDFs
+              </Button>
+              <Button onClick={sendAllByEmail} size="lg" className="bg-blue-600 hover:bg-blue-700">
+                <Send className="w-5 h-5 mr-2" />
+                Envoyer tous par email
+              </Button>
+              <Button onClick={clearAll} size="lg" variant="destructive">
+                <RefreshCw className="w-5 h-5 mr-2" />
+                Nouveau découpage
+              </Button>
             </div>
 
-             <div className="mt-4 space-y-2 pt-10">
+            <Separator />
+
+            {/* Liste des fichiers */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {downloadLinks.map((d) => (
                 <div
                   key={d.matricule}
-                  className="flex items-center justify-between border rounded-md px-3 py-2 bg-white shadow-sm"
+                  className="group relative border rounded-xl p-5 bg-card hover:shadow-lg transition-all hover:border-primary/50"
                 >
-                  <span className="font-semibold text-sm truncate max-w-[60%]">
-                    {d.matricule}.pdf
-                  </span>
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <h4 className="font-bold text-lg">{d.matricule}</h4>
+                      <p className="text-sm text-muted-foreground">Bulletin de paie</p>
+                    </div>
+                    <FileText className="w-8 h-8 text-primary/70" />
+                  </div>
 
-                 <div className="flex items-center gap-2">
-
-  {/* Bouton Télécharger */}
-  <Button
-    onClick={() => downloadFile(d.url, `${d.matricule}.pdf`)}
-    className="px-3 py-1 text-xs bg-primary text-white rounded hover:bg-primary/80"
-  >
-    Télécharger
-  </Button>
-
-  {/* 🔥 Bouton Envoyer par email */}
-  <Button
-    onClick={() => sendByEmail(d)}
-    className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-  >
-    Envoyer email
-  </Button>
-
-</div>
-
+                  <div className="mt-4 flex gap-2">
+                    <Button
+                      onClick={() => downloadFile(d.url, `${d.matricule}.pdf`)}
+                      size="sm"
+                      className="flex-1"
+                    >
+                      <Download className="w-4 h-4 mr-1" />
+                      Télécharger
+                    </Button>
+                    <Button
+                      onClick={() => sendByEmail(d)}
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-blue-600 text-blue-600 hover:bg-blue-50"
+                    >
+                      <Mail className="w-4 h-4 mr-1" />
+                      Email
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
+          </CardContent>
+          
+        </Card>
+        
+        
+      )}
 
+       {showModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+          <div className="bg-white rounded-xl shadow-lg p-6 max-w-sm w-full space-y-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-6 h-6 text-green-600" />
+              <h3 className="text-lg font-semibold">Information</h3>
+            </div>
+            <p>{modalMessage}</p>
+            <Button className="w-full" onClick={handleCloseModal}>
+              Fermer
+            </Button>
           </div>
-         
-        )}
-
-        {/* ----------------------------- Bouton lancer ----------------------------- */}
-        <Button
-          onClick={handleSplit}
-          disabled={!selectedFile || isProcessing}
-          className="w-full"
-          size="lg"
-        >
-          {isProcessing ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Découpage en cours...
-            </>
-          ) : (
-            <>
-              <FileText className="w-4 h-4 mr-2" />
-              Lancer le découpage
-            </>
-          )}
-        </Button>
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </div>
+    
   )
 }
+
+export default PdfSplitter
