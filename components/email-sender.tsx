@@ -36,6 +36,11 @@ export function PdfEmailManager() {
   const [scheduledTime, setScheduledTime] = useState<string>("")
   const [countdown, setCountdown] = useState<number | null>(null)
   const [isScheduled, setIsScheduled] = useState(false)
+  const [mailSubject, setMailSubject] = useState("Fiche de paie");
+const [mailText, setMailText] = useState("");
+const [showModal, setShowModal] = useState(false)
+
+
 
   useEffect(() => {
     const saved = localStorage.getItem("downloadLinks")
@@ -89,6 +94,8 @@ export function PdfEmailManager() {
             "files",
             JSON.stringify([{ matricule: item.name.replace(".pdf", ""), email: "leoniegondo@gmail.com" }])
           )
+          body.append("subject", mailSubject);
+body.append("text", mailText);
         } else {
           // Fichier découpé (via URL)
           const response = await fetch(item.url)
@@ -100,6 +107,8 @@ export function PdfEmailManager() {
             "files",
             JSON.stringify([{ matricule: item.matricule, email: item.email || "leoniegondo@gmail.com" }])
           )
+          body.append("subject", mailSubject);
+body.append("text", mailText);
         }
 
         const res = await fetch(endpoint, {
@@ -123,6 +132,7 @@ export function PdfEmailManager() {
 
     setIsProcessing(false)
     setSuccess(true)
+    setShowModal(true)
   }
 
   const formatCountdown = (seconds: number) => {
@@ -246,6 +256,40 @@ export function PdfEmailManager() {
         </Card>
       </div>
 
+      <Card className="border-2">
+  <CardHeader>
+    <CardTitle className="flex items-center gap-2">
+      <Mail className="w-5 h-5" />
+      Contenu de l'email
+    </CardTitle>
+    <CardDescription>
+      Personnalisez l’objet et le message du mail avant l’envoi
+    </CardDescription>
+  </CardHeader>
+
+  <CardContent className="space-y-4">
+    <div>
+      <label className="text-sm font-medium">Objet du mail</label>
+      <Input
+        value={mailSubject}
+        onChange={(e) => setMailSubject(e.target.value)}
+        placeholder="Objet"
+      />
+    </div>
+
+    <div>
+      <label className="text-sm font-medium">Message</label>
+      <textarea
+        className="w-full border rounded-md p-3 min-h-[120px]"
+        value={mailText}
+        onChange={(e) => setMailText(e.target.value)}
+        placeholder="Tapez ici le message du mail..."
+      ></textarea>
+    </div>
+  </CardContent>
+</Card>
+
+
       {/* === Programmation d'envoi === */}
       <Card className="border-2 border-dashed">
         <CardHeader>
@@ -322,17 +366,37 @@ export function PdfEmailManager() {
       )}
 
       {/* === Message de succès === */}
-      {success && (
-        <Alert className="border-green-200 bg-green-50">
-          <CheckCircle2 className="h-5 w-5 text-green-600" />
-          <AlertTitle className="text-green-800">Succès !</AlertTitle>
-          <AlertDescription className="text-green-700">
-            {emailsSent} fichier(s) ont été envoyés avec succès
-          </AlertDescription>
-        </Alert>
-      )}
+      <SuccessModal
+  open={showModal}
+  onClose={() => setShowModal(false)}
+  count={emailsSent}
+/>
+
     </div>
   )
 }
+
+function SuccessModal({ open, onClose, count }: { open: boolean; onClose: () => void; count: number }) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl p-8 max-w-sm w-full animate-in fade-in zoom-in duration-200">
+        <div className="flex flex-col items-center text-center space-y-4">
+          <CheckCircle2 className="w-12 h-12 text-green-600" />
+          <h2 className="text-xl font-semibold">Envoi réussi 🎉</h2>
+          <p className="text-muted-foreground">
+            {count} fichier(s) ont été envoyés avec succès.
+          </p>
+
+          <Button className="mt-4 w-full" onClick={onClose}>
+            Fermer
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 export default PdfEmailManager
