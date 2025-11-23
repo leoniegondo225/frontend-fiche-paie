@@ -23,7 +23,13 @@ import {
   Sparkles
 } from 'lucide-react'
 
-export function PasswordProtector() {
+
+interface Props {
+  isAuthenticated?: boolean
+}
+
+
+export function PasswordProtector ({ isAuthenticated }: Props) {
   const [useMatricule, setUseMatricule] = useState(true)
   const [customPassword, setCustomPassword] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -243,7 +249,7 @@ export function PasswordProtector() {
                 </span>
                 <span className="text-sm text-gray-600">{filesProtected} fichier(s) traité(s)</span>
               </div>
-              <Progress value={progress || 50} className="h-3 bg-gray-200" indicatorClassName="bg-gray-600" />
+              <Progress value={progress || 40} className="h-3 bg-gray-200" indicatorClassName="bg-gray-600" />
             </div>
           )}
 
@@ -284,12 +290,11 @@ export function PasswordProtector() {
 
           <CardContent className="space-y-6">
             <div className="flex flex-wrap gap-3 justify-center">
-              <Button onClick={downloadAll} size="lg" className="bg-gray-800 hover:bg-gray-900">
+              <Button onClick={downloadAll} size="lg" variant="secondary">
                 <Download className="w-5 h-5 mr-2" />
                 Télécharger tout
               </Button>
               <Button onClick={clearResults} size="lg" variant="outline" className="border-gray-400">
-                <Sparkles className="w-5 h-5 mr-2" />
                 Nouvelle protection
               </Button>
             </div>

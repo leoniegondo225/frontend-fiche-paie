@@ -38,7 +38,6 @@ export default function DashboardPage() {
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated')
     localStorage.removeItem('token')
-    localStorage.removeItem('downloadLinks')
     router.push('/')
   }
 
@@ -187,7 +186,7 @@ export default function DashboardPage() {
             </TabsContent>
 
             <TabsContent value="protect" className="mt-0">
-              <PasswordProtector />
+              <PasswordProtector  />
             </TabsContent>
 
             <TabsContent value="send" className="mt-0">

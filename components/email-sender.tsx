@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -17,7 +17,6 @@ import {
   Send,
   CalendarClock,
   Files,
-  AlertCircle
 } from 'lucide-react'
 
 interface FileLink {
@@ -37,7 +36,10 @@ export function PdfEmailManager() {
   const [countdown, setCountdown] = useState<number | null>(null)
   const [isScheduled, setIsScheduled] = useState(false)
   const [mailSubject, setMailSubject] = useState("Fiche de paie");
-const [mailText, setMailText] = useState("");
+const [mailText, setMailText] = useState(`Bonjour,
+
+
+Veuillez trouver ci-joint votre fiche de paie du mois.\n\nCordialement,\nService Ressources Humaines`);
 const [showModal, setShowModal] = useState(false)
 
 
@@ -127,7 +129,7 @@ body.append("text", mailText);
 
       setEmailsSent(i + 1)
       setProgress(((i + 1) / total) * 100)
-      await new Promise(r => setTimeout(r, 200))
+      await new Promise(r => setTimeout(r, 150))
     }
 
     setIsProcessing(false)

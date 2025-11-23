@@ -9,23 +9,28 @@ import { Alert } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
 import { FileText, CheckCircle, Loader2 } from 'lucide-react'
 
-export function PdfSplitter() {
+interface PdfSplitterProps {
+  isAuthenticated?: boolean
+}
+
+
+export function PdfSplitter({ isAuthenticated }: PdfSplitterProps) {
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [success, setSuccess] = useState(false)
   const [downloadLinks, setDownloadLinks] = useState<{ matricule: string, url: string }[]>([])
 
+  
   /* ---------------------------------------------------- */
   /* Charger depuis localStorage                          */
   /* ---------------------------------------------------- */
-  useEffect(() => {
-    const saved = localStorage.getItem("downloadLinks")
-    if (saved) {
-      setDownloadLinks(JSON.parse(saved))
-      setSuccess(true)
-    }
-  }, [])
+useEffect(() => {
+  const saved = localStorage.getItem("downloadLinks")
+  if (saved) setDownloadLinks(JSON.parse(saved))
+}, [isAuthenticated])
+
 
   useEffect(() => {
     if (downloadLinks.length > 0) {
@@ -125,6 +130,7 @@ export function PdfSplitter() {
   /* ---------------------------------------------------- */
   /* Interface                                             */
   /* ---------------------------------------------------- */
+  
   return (
     <Card>
       <CardHeader>
